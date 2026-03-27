@@ -29,7 +29,7 @@ This version (by Nuki) adds and optimizes the following based on the original:
 
 ## Feature Overview
 
-FLASH_DOCK provides **7 functional modules**, covering the complete workflow from ligand preparation to affinity analysis:
+FLASH_DOCK provides **6 functional modules**, covering the complete workflow from ligand preparation to affinity analysis:
 
 ### 1. Prepare Ligand
 Upload SDF files, draw molecules online (Ketcher), or directly input SMILES strings. The system automatically generates optimized 3D conformations (ETKDG + MMFF force field). Supports batch processing of SMILES data from CSV files.
@@ -49,8 +49,6 @@ Predicts binding affinity based on the PLANET model, supports single and batch p
 ### 6. Task Management (New)
 Centrally view all backend docking tasks with status icons (✅🔄❌), sort by time/name, one-click result package downloads, and 3D visualization of docking results.
 
-### 7. Author Information
-
 ---
 
 ## Quick Start (One-Click Installation)
@@ -66,7 +64,7 @@ Before starting, ensure the following are installed on your system:
 
 ```bash
 # 1. Clone the project
-git clone https://github.com/AIchemist-Nuki/FLASH_DOCK.git
+git clone https://github.com/AIChemist-Nuki/FLASH_DOCK.git
 cd FLASH_DOCK
 
 # 2. Download Uni-Mol Docking v2 model weights (approximately 465MB)
