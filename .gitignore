@@ -1,0 +1,47 @@
+# ====== 运行时生成的文件 ======
+jobs/
+Batch_Docking_Result/
+Result/Binding_Affinity/*
+Result/Docking_Result/*
+Result/Predict_Pocket/*
+Result/Prepare_Ligand/*
+!Result/*/.gitkeep
+
+# ====== 模型权重（太大，用户需自行下载） ======
+others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt
+
+# ====== macOS ======
+.DS_Store
+**/.DS_Store
+
+# ====== Python ======
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ====== 虚拟环境 ======
+venv/
+.venv/
+env/
+
+# ====== IDE ======
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ====== 备份和旧版本 ======
+backup/
+FlashDock_web.py
+FlashDock_web0315.py
+FlashDock_web_v1.py
+examples0/
+
+# ====== 临时文件 ======
+*.tmp
+*.log
+vis_tmp/
