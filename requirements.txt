@@ -1,15 +1,13 @@
 # ============================================================
-# FLASH_DOCK — main application dependencies (Streamlit UI env)
-# Target: Python 3.9 (conda env `flash_dock`)
-# Pins reflect a known-good environment on macOS (Apple Silicon).
+# FLASH_DOCK — pip layer (reference only).
 #
-# NOTE on PyTorch: torch is installed separately by setup.sh because the
-# correct build is platform-specific (CUDA / CPU / Apple MPS). If you install
-# manually, get the right wheel from https://pytorch.org/get-started/locally/
-# Uni-Core is also installed by setup.sh (compiled against your torch).
+# RECOMMENDED: use the single unified conda env instead —
+#     conda env create -f environment.yml   &&   conda activate flashdock
 #
-# Pocket detection (PocketFormer) runs in a SEPARATE isolated env — see
-# requirements-pocket.txt and setup.sh. Do not mix it into this env.
+# This list is just the pip-installable Streamlit packages. The full app also
+# needs torch / torch_geometric / pytorch_scatter / pytorch_cluster / fpocket /
+# rdkit, which on Apple Silicon must come from conda-forge (see environment.yml).
+# Pokeformer pocket detection now runs in the SAME env — no separate env.
 # ============================================================
 
 # --- Web UI ---

@@ -22,9 +22,9 @@ from stmol import showmol
 from streamlit_ketcher import st_ketcher
 from streamlit_molstar.docking import st_molstar_docking
 
-# Pocket detection (PocketFormer) — replaces the old P2Rank step.
-from pocket import predict_pockets, PocketFormerError
-from pocket.pocketformer import weights_present
+# Pocket detection (Pokeformer) — replaces the old P2Rank step.
+from pocket import predict_pockets, PokeformerError
+from pocket.pokeformer import weights_present
 
 # UI toolkit (theme + components)
 from ui import inject_theme, page_header, status_badge, sidebar_brand
@@ -139,7 +139,7 @@ if page == "home":
     # --- engines / credits ---
     _algos = [
         ("DOCKING", "Uni-Mol Docking v2", "https://arxiv.org/abs/2405.11769"),
-        ("POCKET DETECTION", "PocketFormer", "https://github.com/pfnet-research/pocket_detection"),
+        ("POCKET DETECTION", "Pokeformer", "https://github.com/pfnet-research/pocket_detection"),
         ("AFFINITY", "PLANET", "https://pubs.acs.org/doi/10.1021/acs.jcim.3c00253"),
     ]
     _algo_cards = "".join(
@@ -371,7 +371,7 @@ elif page == "prepare_ligand":
 
 
 # ------------------------------------------------------------------------------
-# Pocket detection (PocketFormer)
+# Pocket detection (Pokeformer)
 # ------------------------------------------------------------------------------
 elif page == "pocket_prediction":
     stage_header("pocket_prediction", t("pocket.title"), t("pocket.subtitle"))
@@ -421,7 +421,7 @@ elif page == "pocket_prediction":
                     file_name="best_pocket.csv", mime="text/csv",
                     use_container_width=True,
                 )
-            except PocketFormerError as e:
+            except PokeformerError as e:
                 st.error(t("pocket.error_run", error=str(e)))
             finally:
                 if tmp_path and os.path.exists(tmp_path):
@@ -446,7 +446,7 @@ elif page == "pocket_prediction":
                     file_name="best_pocket.csv", mime="text/csv",
                     use_container_width=True,
                 )
-            except PocketFormerError as e:
+            except PokeformerError as e:
                 st.error(t("pocket.error_run", error=str(e)))
 
     # ---- batch ----
@@ -473,7 +473,7 @@ elif page == "pocket_prediction":
                     file_name="batch_pocket_predictions.csv",
                     mime="text/csv", use_container_width=True,
                 )
-            except PocketFormerError as e:
+            except PokeformerError as e:
                 st.error(t("pocket.error_run", error=str(e)))
             finally:
                 for p in paths:

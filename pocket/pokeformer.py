@@ -1,13 +1,13 @@
-"""PocketFormer adapter — drop-in replacement for the old P2Rank pocket step.
+"""Pokeformer adapter — drop-in replacement for the old P2Rank pocket step.
 
-PocketFormer (https://github.com/pfnet-research/pocket_detection, vendored at
+Pokeformer (https://github.com/pfnet-research/pocket_detection, vendored at
 ``others/pocket_detection``) detects candidate pockets with **fpocket** and
 ranks them with a 5-fold graph-transformer ensemble. It pins an older/separate
 stack (torch / PyG) that conflicts with the main app, so we run it as a
 **subprocess inside its own conda env** (default: ``flashdock-pocket``) — the
 same pattern the app already uses for Uni-Mol and PLANET.
 
-This module post-processes PocketFormer's output into the *exact* schema the
+This module post-processes Pokeformer's output into the *exact* schema the
 docking pages already consume, so nothing downstream changes:
 
 * single protein  ->  ``predict_single()`` returns ``{name, center, rank, score}``
@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import shutil
 import subprocess
 import tempfile
+from importlib.util import find_spec
 from pathlib import Path
 
 import pandas as pd
@@ -38,12 +40,12 @@ import pandas as pd
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 POCKET_REPO = _REPO_ROOT / "others" / "pocket_detection"
 POCKET_EXAMPLES = POCKET_REPO / "examples"
-DEFAULT_ENV = "flashdock-pocket"
+DEFAULT_ENV = "flashdock"
 MODEL_FILES = [f"fold{i}_best_model.pt" for i in range(5)]
 
 
-class PocketFormerError(RuntimeError):
-    """Raised when PocketFormer cannot be run or produced no usable pocket."""
+class PokeformerError(RuntimeError):
+    """Raised when Pokeformer cannot be run or produced no usable pocket."""
 
 
 # --- environment / executable resolution -----------------------------------
@@ -60,20 +62,30 @@ def _conda_base() -> str | None:
         return None
 
 
-def pocket_python(env_name: str = DEFAULT_ENV) -> str:
-    """Return the python interpreter of the isolated PocketFormer env.
+def _current_env_can_run() -> bool:
+    """True if the interpreter running the app already has Pokeformer's deps."""
+    return find_spec("torch_geometric") is not None and shutil.which("fpocket") is not None
 
-    Override with the ``FLASHDOCK_POCKET_PYTHON`` environment variable.
+
+def pocket_python(env_name: str = DEFAULT_ENV) -> str:
+    """Return the python interpreter that can run Pokeformer.
+
+    Resolution order:
+      1. ``FLASHDOCK_POCKET_PYTHON`` env var (explicit override);
+      2. the current interpreter, if it already has the deps (unified env);
+      3. the named conda env ``env_name``;
+      4. ``python`` (let ``conda run`` resolve it).
     """
     override = os.environ.get("FLASHDOCK_POCKET_PYTHON")
     if override:
         return override
+    if _current_env_can_run():
+        return sys.executable
     base = _conda_base()
     if base:
         cand = Path(base) / "envs" / env_name / "bin" / "python"
         if cand.exists():
             return str(cand)
-    # last resort: let `conda run` resolve it
     return "python"
 
 
@@ -90,9 +102,9 @@ def weights_present() -> bool:
 
 # --- PDB cleaning -----------------------------------------------------------
 def clean_pdb(src: str | Path, dst: str | Path) -> None:
-    """Write a PocketFormer-ready copy: keep protein atoms, drop waters/hetero.
+    """Write a Pokeformer-ready copy: keep protein atoms, drop waters/hetero.
 
-    PocketFormer expects PDBs with waters, ligands and non-amino-acid residues
+    Pokeformer expects PDBs with waters, ligands and non-amino-acid residues
     removed. We keep ATOM records (and TER), drop HETATM/HOH, which is a safe
     superset for standard structures.
     """
@@ -116,7 +128,7 @@ def _pqr_centroid(pqr_path: Path) -> tuple[float, float, float]:
                 zs += float(ln[46:54])
                 n += 1
     if n == 0:
-        raise PocketFormerError(f"empty pocket vertex file: {pqr_path}")
+        raise PokeformerError(f"empty pocket vertex file: {pqr_path}")
     return xs / n, ys / n, zs / n
 
 
@@ -125,7 +137,7 @@ def _parse_pocket_geometry(pdb_pockets_dir: Path) -> dict[int, dict]:
     out_dir = pdb_pockets_dir / "in_out"
     info_file = out_dir / "in_info.txt"
     if not info_file.exists():
-        raise PocketFormerError(f"missing fpocket info file: {info_file}")
+        raise PokeformerError(f"missing fpocket info file: {info_file}")
 
     volumes: dict[int, float] = {}
     pkt_id = None
@@ -157,7 +169,7 @@ def _parse_pocket_geometry(pdb_pockets_dir: Path) -> dict[int, dict]:
 def _match_rows_to_pockets(rows: pd.DataFrame, geom: dict[int, dict]) -> pd.DataFrame:
     """Attach center coordinates to each scored pocket row via volume match.
 
-    PocketFormer's CSV gives (volume, pred_aver) per pocket but no center.
+    Pokeformer's CSV gives (volume, pred_aver) per pocket but no center.
     fpocket's geometry gives (volume, center) per pocket_id. Volumes come from
     the same source, so we match each row to its pocket_id by nearest volume
     (order-independent and robust).
@@ -185,21 +197,21 @@ def _match_rows_to_pockets(rows: pd.DataFrame, geom: dict[int, dict]) -> pd.Data
 
 
 # --- main entry points ------------------------------------------------------
-def run_pocketformer(
+def run_pokeformer(
     pdb_paths: list[str | Path],
     workdir: str | Path,
     env_name: str = DEFAULT_ENV,
     gpu: int = -1,
     do_clean: bool = True,
 ) -> tuple[Path, Path, dict[str, str]]:
-    """Run PocketFormer inference on one or more PDB files.
+    """Run Pokeformer inference on one or more PDB files.
 
     Returns ``(infer_csv, pockets_base, name_map)`` where ``name_map`` maps the
     safe basename used for inference back to the caller's original filename.
     """
     if not weights_present():
-        raise PocketFormerError(
-            "PocketFormer model weights not found in "
+        raise PokeformerError(
+            "Pokeformer model weights not found in "
             f"{POCKET_EXAMPLES}. Download best_models.tar.xz from Zenodo "
             "(10.5281/zenodo.13070037) and extract the fold*_best_model.pt files "
             "there — see setup.sh / README."
@@ -253,8 +265,8 @@ def run_pocketformer(
         text=True,
     )
     if proc.returncode != 0 or not infer_csv.exists():
-        raise PocketFormerError(
-            "PocketFormer inference failed.\n"
+        raise PokeformerError(
+            "Pokeformer inference failed.\n"
             f"command: {' '.join(cmd)}\n"
             f"stderr (tail):\n{proc.stderr[-2000:]}"
         )
@@ -280,10 +292,10 @@ def predict_pockets(
 
     tmp_ctx = None
     if workdir is None:
-        tmp_ctx = tempfile.TemporaryDirectory(prefix="pocketformer_")
+        tmp_ctx = tempfile.TemporaryDirectory(prefix="pokeformer_")
         workdir = tmp_ctx.name
     try:
-        infer_csv, pockets_base, _ = run_pocketformer(
+        infer_csv, pockets_base, _ = run_pokeformer(
             pdb_paths, workdir, env_name=env_name, gpu=gpu
         )
         df = pd.read_csv(infer_csv)
@@ -312,7 +324,7 @@ def predict_pockets(
             all_rows.append(matched)
 
         if not all_rows:
-            raise PocketFormerError("PocketFormer found no pockets for the input(s).")
+            raise PokeformerError("Pokeformer found no pockets for the input(s).")
 
         result = pd.concat(all_rows, ignore_index=True)
         result["Center"] = result.apply(

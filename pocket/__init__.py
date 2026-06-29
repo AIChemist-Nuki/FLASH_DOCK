@@ -1,9 +1,9 @@
-"""Pocket detection for FLASH_DOCK (PocketFormer adapter)."""
+"""Pocket detection for FLASH_DOCK (Pokeformer adapter)."""
 
-from .pocketformer import (
-    PocketFormerError,
+from .pokeformer import (
+    PokeformerError,
     predict_pockets,
     predict_single,
 )
 
-__all__ = ["PocketFormerError", "predict_pockets", "predict_single"]
+__all__ = ["PokeformerError", "predict_pockets", "predict_single"]

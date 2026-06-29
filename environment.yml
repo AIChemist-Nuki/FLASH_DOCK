@@ -1,0 +1,54 @@
+# ============================================================
+# FLASH_DOCK — single unified conda environment.
+#
+#   conda env create -f environment.yml      # (or mamba)
+#   conda activate flashdock
+#
+# This ONE env runs the Streamlit app AND Pokeformer pocket detection.
+# torch / PyG / pytorch_scatter / pytorch_cluster / fpocket / rdkit come from
+# conda-forge (on Apple Silicon there are no working pip wheels for that stack).
+#
+# Why torch 2.5.x (and not newer): Pokeformer needs pytorch_scatter + cluster,
+# which on osx-arm64 only pair cleanly with torch <2.6 on conda-forge. 2.5.x
+# also keeps torch.load's safe default and ships Apple MPS — so it's the newest
+# version that satisfies BOTH the app and Pokeformer in a single environment.
+#
+# Docking (Uni-Mol/Uni-Core) and affinity (PLANET/DGL) need extra heavy deps
+# that setup.sh installs into this same env on a best-effort basis.
+# ============================================================
+name: flashdock
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pytorch>=2.4,<2.6
+  - pytorch_scatter
+  - pytorch_cluster
+  - fpocket=4.2
+  - rdkit
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - seaborn
+  - pip
+  - pip:
+      # --- Streamlit UI ---
+      - streamlit==1.48.1
+      - streamlit-molstar==0.4.21
+      - streamlit-ketcher==0.0.1
+      - py3Dmol==2.5.2
+      - stmol==0.0.9
+      - ipython_genutils        # shim required by stmol's ipywidgets
+      # --- Pokeformer (pip layer) ---
+      - torch_geometric==2.5.3
+      - freesasa==2.2.1
+      - omegaconf==2.3.0
+      - torchmetrics==1.4.0.post0
+      - biopython==1.84
+      - torchinfo
+      # --- shared utils ---
+      - tqdm
+      - lmdb
+      - biopandas
