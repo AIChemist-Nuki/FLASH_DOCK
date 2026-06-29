@@ -10,6 +10,13 @@ Result/Prepare_Ligand/*
 # ====== 模型权重（太大，用户需自行下载） ======
 others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt
 
+# PocketFormer 权重（396MB，需从 Zenodo 下载，详见 setup.sh / README）
+others/pocket_detection/examples/*.pt
+others/pocket_detection/examples/best_models.tar.xz
+# PocketFormer 运行时产物
+others/pocket_detection/examples/pockets/
+others/pocket_detection/examples/infer_results.csv
+
 # ====== macOS ======
 .DS_Store
 **/.DS_Store
@@ -28,11 +35,13 @@ venv/
 .venv/
 env/
 
-# ====== IDE ======
+# ====== IDE / 本地工具 ======
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
+*.err
 
 # ====== 备份和旧版本 ======
 backup/

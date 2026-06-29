@@ -1,0 +1,40 @@
+# ============================================================
+# FLASH_DOCK — main application dependencies (Streamlit UI env)
+# Target: Python 3.9 (conda env `flash_dock`)
+# Pins reflect a known-good environment on macOS (Apple Silicon).
+#
+# NOTE on PyTorch: torch is installed separately by setup.sh because the
+# correct build is platform-specific (CUDA / CPU / Apple MPS). If you install
+# manually, get the right wheel from https://pytorch.org/get-started/locally/
+# Uni-Core is also installed by setup.sh (compiled against your torch).
+#
+# Pocket detection (PocketFormer) runs in a SEPARATE isolated env — see
+# requirements-pocket.txt and setup.sh. Do not mix it into this env.
+# ============================================================
+
+# --- Web UI ---
+streamlit==1.48.1
+streamlit-molstar==0.4.21
+streamlit-ketcher==0.0.1
+
+# --- Molecular visualization ---
+py3Dmol==2.5.2
+stmol==0.0.9
+
+# --- Cheminformatics ---
+rdkit==2025.3.5
+
+# --- Scientific stack ---
+numpy==1.26.4
+pandas==2.3.1
+scipy==1.13.1
+scikit-learn==1.6.1
+matplotlib==3.9.4
+seaborn==0.13.2
+
+# --- Utilities ---
+tqdm==4.67.1
+
+# --- Used by the bundled Uni-Mol docking subprocess ---
+lmdb==1.7.5
+biopandas==0.5.1

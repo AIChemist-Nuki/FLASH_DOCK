@@ -1,0 +1,15 @@
+# FLASH_DOCK theme — scientific-instrument identity.
+# Fine-grained typography & components live in ui/theme.py (injected CSS).
+[theme]
+base = "light"
+primaryColor = "#06B6D4"            # electric cyan-teal — "flash" + aqueous
+backgroundColor = "#F7F9FB"         # cool lab off-white
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F1B2D"               # deep slate ink
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

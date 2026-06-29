@@ -4,379 +4,173 @@
 
 > AI-Powered Molecular Docking Platform
 >
-> 🌐 Built-in multilingual support (中文 / English / 日本語) — switch in the sidebar
+> 🌐 Built-in multilingual UI (中文 / English / 日本語), switchable in the sidebar
 
-FLASH_DOCK is a computational chemistry web application built on Streamlit, integrating ligand preparation, pocket prediction, molecular docking, and binding affinity prediction functionality, providing an out-of-the-box graphical interface for drug discovery research.
-
-This project is forked from [Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) with extended functionality and optimizations based on the original version.
-
----
-
-## Main Differences from the Original Version
-
-This version (by Nuki) adds and optimizes the following based on the original:
-
-| Item | Description |
-|------|-------------|
-| **Task Management Module** | New "Task Management" page to view the status of all backend docking tasks (Completed/Running/Failed), with sorting by time or name, direct result package downloads, and 3D visualization |
-| **Batch Docking Result Visualization** | Added 3D visualization functionality for docking results in the batch molecular docking page, automatically matching protein PDB with ligand SDF for display |
-| **Task Quantity Limit** | New validation for batch docking task quantity limit (200 tasks) to prevent server overload |
-| **Task Logging Enhancement** | Each docking task has detailed run logs recording coordinate information and success/failure status |
-| **Multilingual Support (i18n)** | Added Chinese/English/Japanese trilingual support with one-click sidebar switching; translation files located in `lang/` directory for easy language expansion |
-| **Code Structure Optimization** | Restructured code after removing password nesting for clearer and more readable code |
+FLASH_DOCK is a Streamlit web app that turns the whole workflow —
+**ligand prep → pocket detection → docking → affinity scoring** — into a
+ready-to-use GUI. Forked from [Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) and refactored.
 
 ---
 
-## Feature Overview
+## What's new in this version (by Nuki)
 
-FLASH_DOCK provides **6 functional modules**, covering the complete workflow from ligand preparation to affinity analysis:
+| Change | Details |
+|--------|---------|
+| **Pocket detection → PocketFormer** | Replaces P2Rank with [PocketFormer](https://github.com/pfnet-research/pocket_detection) (graph transformer + fpocket); outputs pockets ranked by ensemble score with center coordinates. **No more Java dependency.** |
+| **Modernized UI** | A cohesive "scientific instrument" design: pipeline-stage headers, monospace coordinates/scores, icon navigation, card layouts. |
+| **Out-of-the-box** | New `requirements.txt` / `environment-pocket.yml`; `setup.sh` installs both envs and fetches weights automatically. |
+| **Leaner code** | Removed duplicate banners and redundant imports; extracted `ui/` (theme + components) and `pocket/` (PocketFormer adapter). |
+| **i18n** | 中 / en / ja, one-click switch; translations in `lang/`. |
 
-### 1. Prepare Ligand
-Upload SDF files, draw molecules online (Ketcher), or directly input SMILES strings. The system automatically generates optimized 3D conformations (ETKDG + MMFF force field). Supports batch processing of SMILES data from CSV files.
-
-### 2. Pocket Prediction
-Automatically predicts protein binding pockets based on the P2Rank algorithm, supports single and batch protein prediction, and outputs pocket center coordinate CSV files for direct use in subsequent docking.
-
-### 3. Molecular Docking
-Based on Uni-Mol Docking v2 model, upload proteins (PDB) and ligands (SDF). Automatically reads pocket prediction CSV to populate docking parameters, or manually adjust the docking box.
-
-### 4. Batch Molecular Docking
-Multi-protein × multi-ligand batch docking with asynchronous backend processing that doesn't block the page. UUID task ID tracking and automatic packaging of results as ZIP files.
-
-### 5. Predict Affinity
-Predicts binding affinity based on the PLANET model, supports single and batch prediction with three tabs: Affinity Prediction / Data View / Heatmap Generation.
-
-### 6. Task Management (New)
-Centrally view all backend docking tasks with status icons (✅🔄❌), sort by time/name, one-click result package downloads, and 3D visualization of docking results.
+> Roadmap: bigger & faster screening — first **Apple MPS**, then **NVIDIA CUDA**. The inference device is already configurable (CPU / MPS / CUDA); acceleration lands in a later release.
 
 ---
 
-## Quick Start (One-Click Installation)
+## Features
+
+| # | Module | Description |
+|---|--------|-------------|
+| 1 | **Prepare ligand** | Upload SDF / draw (Ketcher) / SMILES → optimized 3D conformer (ETKDG + MMFF); CSV batch supported |
+| 2 | **Pocket detection** | PocketFormer locates binding pockets, exports center-coordinate CSV (single + batch) |
+| 3 | **Docking** | Uni-Mol Docking v2; auto-fills the grid from a pocket CSV or set it manually |
+| 4 | **Batch docking** | Many proteins × many ligands, background async, UUID tracking, ZIP results |
+| 5 | **Affinity** | PLANET binding-affinity prediction with data view + heatmaps |
+| 6 | **Task manager** | Inspect background jobs, download results, 3D visualization |
+
+---
+
+## Architecture: why two environments
+
+PocketFormer pins an older/different stack (torch + PyG + fpocket) that conflicts
+with the main app (Streamlit + Uni-Mol/Uni-Core). So FLASH_DOCK runs PocketFormer
+in its **own conda env**, invoked as a **subprocess** — the same pattern used for
+Uni-Mol and PLANET.
+
+| Env | Purpose | Key deps |
+|-----|---------|----------|
+| `flash_dock` (main) | Streamlit UI + Uni-Mol docking + PLANET | Python 3.9, torch, streamlit, rdkit, unicore |
+| `flashdock-pocket` (isolated) | PocketFormer only | Python 3.10, torch<2.6, PyG 2.5.3, pytorch_scatter/cluster, fpocket 4.2 |
+
+---
+
+## Quick start
 
 ### Prerequisites
+- **conda or mamba** ([Miniforge](https://github.com/conda-forge/miniforge) recommended)
+- **Python 3.9+**
+- GPU optional: NVIDIA CUDA auto-enabled; Apple Silicon uses MPS/CPU
 
-Before starting, ensure the following are installed on your system:
-- **Python 3.8+**
-- **Java 8+** (required for P2Rank pocket prediction. Installation: Ubuntu `sudo apt install default-jdk` / macOS `brew install openjdk`)
-- **CUDA GPU** (optional but strongly recommended for significant acceleration of docking calculations)
-
-### Installation Steps
+> No Java required anymore — pocket detection uses fpocket (installed into the isolated env by `setup.sh`).
 
 ```bash
-# 1. Clone the project
 git clone https://github.com/AIChemist-Nuki/FLASH_DOCK.git
 cd FLASH_DOCK
-
-# 2. Download Uni-Mol Docking v2 model weights (approximately 465MB)
-#    Download address: https://github.com/deepmodeling/Uni-Mol/releases
-#    Find and download unimol_docking_v2_240517.pt to any location
-
-# 3. Create virtual environment (recommended)
-conda create -n flashdock python=3.9 -y
-conda activate flashdock
-
-# 4. One-click installation and launch (pass the model weight path)
+conda create -n flash_dock python=3.9 -y && conda activate flash_dock
 bash setup.sh /path/to/unimol_docking_v2_240517.pt
 ```
 
-`setup.sh` will automatically complete all of the following:
-- Detect system environment (Python, Java, CUDA)
-- Copy model weights to correct location
-- Install PyTorch (auto-adapts to CUDA/CPU)
-- Compile and install Uni-Core framework
-- Install all Python dependencies
-- Check P2Rank and PLANET models
-- Print installation status summary
-- Launch the Streamlit application
+`setup.sh` installs main deps + PyTorch + Uni-Core, creates the isolated
+`flashdock-pocket` env (with fpocket), downloads PocketFormer weights from
+Zenodo (~396MB), places the Uni-Mol weight, then launches the app at
+`http://localhost:8501`.
 
-After successful launch, the browser will automatically open `http://localhost:8501`.
-
-### Subsequent Launches
-
-After the first installation, you only need:
-
-```bash
-conda activate flashdock
-bash setup.sh
-```
-
-The script will skip already-installed dependencies and launch the application directly.
+Later runs: `conda activate flash_dock && bash setup.sh` (or `streamlit run app.py`).
 
 ---
 
-### Manual Installation (if the script is not applicable)
+## Model files
 
-<details>
-<summary>Click to expand manual installation steps</summary>
+| Model | Size | In repo? | Use | Source |
+|-------|------|----------|-----|--------|
+| `unimol_docking_v2_240517.pt` | 465MB | ❌ download | Docking | [Uni-Mol Releases](https://github.com/deepmodeling/Uni-Mol/releases) |
+| `fold0~4_best_model.pt` | ~396MB | ❌ download | Pocket (PocketFormer) | Zenodo [10.5281/zenodo.13070037](https://doi.org/10.5281/zenodo.13070037) (auto via `setup.sh`) |
+| `PLANET.param` | 18MB | ✅ included | Affinity | — |
 
-#### 1. Install PyTorch
+---
 
-Go to https://pytorch.org/get-started/locally/ to obtain the installation command for your hardware environment:
+## Manual install
 
-```bash
-# With CUDA GPU:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-# CPU only:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-```
-
-#### 2. Install Uni-Core
+<details><summary>Expand</summary>
 
 ```bash
-pip install ninja
-cd others/Uni-Core
-pip install .
-cd ../..
-```
+# A. main env
+conda create -n flash_dock python=3.9 -y && conda activate flash_dock
+pip install -r requirements.txt
+pip install torch torchvision                  # pick per hardware
+pip install ninja && pip install ./others/Uni-Core
+# place Uni-Mol weight at others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt
 
-If compilation fails, refer to the [Uni-Core official repository](https://github.com/dptech-corp/Uni-Core).
+# B. pocket env
+conda env create -f environment-pocket.yml
+# download Zenodo best_models.tar.xz, extract fold0~4_best_model.pt into
+#   others/pocket_detection/examples/
 
-#### 3. Install other dependencies
-
-```bash
-pip install streamlit streamlit-molstar streamlit-ketcher py3Dmol stmol
-pip install rdkit-pypi pandas numpy scipy scikit-learn matplotlib seaborn
-pip install tqdm lmdb sh biopandas
-```
-
-#### 4. Place model weights
-
-Place the downloaded `unimol_docking_v2_240517.pt` at:
-
-```
-others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt
-```
-
-#### 5. Ensure P2Rank is executable
-
-```bash
-chmod +x others/p2rank_2.5/prank
-```
-
-#### 6. Launch
-
-```bash
-streamlit run FlashDock_0315.py
+# C. run
+conda activate flash_dock && streamlit run app.py
 ```
 
 </details>
 
 ---
 
-### Model File Description
+## Workflow
 
-| Model | Size | Included in Repository? | Purpose |
-|-------|------|------------------------|---------|
-| `unimol_docking_v2_240517.pt` | 465MB | ❌ Download required | Molecular docking (core functionality) |
-| `PLANET.param` | 18MB | ✅ Included | Affinity prediction |
-| `p2rank_2.5/` | 292MB | ✅ Included | Pocket prediction |
+**Prepare ligand → Pocket detection → Docking → (Batch) → Affinity.**
+Grab sample files from the home page.
 
-Uni-Mol model download address: [Uni-Mol Releases](https://github.com/deepmodeling/Uni-Mol/releases)
-
----
-
-## Usage Tutorial
-
-### Typical Workflow
-
-```
-Prepare Ligand → Pocket Prediction → Molecular Docking → Affinity Prediction
-```
-
-Below is a complete molecular docking experiment walkthrough. The project includes example files that can be downloaded by clicking "Download Example Files" on the homepage.
+1. **Prepare ligand** — SDF / Ketcher / SMILES → optimized 3D SDF; CSV with `mol_name`, `smiles` for batch.
+2. **Pocket detection** — upload PDB(s); single mode downloads `best_pocket.csv`, batch mode exports a CSV with `Protein File / rank / center_x/y/z` ready for batch docking. Centers come from fpocket pocket geometry, ranked by PocketFormer's ensemble score.
+3. **Docking** — upload protein + ligand; a pocket CSV auto-fills the grid, or set it manually; visualize and download.
+4. **Batch docking** — upload the batch pocket CSV + all proteins/ligands; edit the `Run` column; submit and note the **job ID** (runs in the background).
+5. **Task manager / Affinity** — track jobs (✅/🔄/❌), download & visualize; PLANET predicts affinity and renders heatmaps.
 
 ---
 
-### Step 1: Prepare Ligand
+## FAQ
 
-> Objective: Convert small molecules to SDF files with optimized 3D conformations
-
-**Method A: Upload SDF File**
-1. Click "Prepare Ligand" in the sidebar
-2. In the "Single Molecule Processing" tab, upload an SDF file
-3. The system automatically displays 2D and 3D molecular structures
-4. Click "Download 3D Molecule SDF File" to save results
-
-**Method B: Draw Molecule or Input SMILES**
-1. Draw molecular structure in the Ketcher editor or directly paste SMILES string
-2. The system automatically generates 3D conformation (ETKDG algorithm + MMFF force field optimization)
-3. Download the generated SDF file
-
-**Method C: Batch Processing**
-1. Switch to the "Batch Processing" tab
-2. Upload a CSV file containing a SMILES column
-3. The system batch-generates 3D structures for all molecules
-4. Download the results
+- **fpocket / weights missing?** Create `flashdock-pocket` via `setup.sh` or `environment-pocket.yml`; ensure `fold0~4_best_model.pt` are under `others/pocket_detection/examples/`. Override the interpreter with `FLASHDOCK_POCKET_PYTHON`.
+- **Docking slow?** Uni-Mol is slow on CPU — use a CUDA GPU; Apple acceleration is coming.
+- **Job stuck `running`?** Check the terminal — usually a missing weight or wrong path.
+- **Uni-Core build fails?** `pip install ninja` first; match torch/CUDA; try `--no-build-isolation`.
 
 ---
 
-### Step 2: Pocket Prediction
+## AI algorithms
 
-> Objective: Find the most likely binding site (pocket) on the protein for small molecule interaction
-
-**Single Protein:**
-1. Click "Pocket Prediction" in the sidebar
-2. Select "Single Protein Pocket Prediction"
-3. Upload a protein PDB file (or select "Load Example Protein" for quick experience)
-4. The system calls P2Rank to predict pocket location
-5. View the pocket center coordinate table and remember the rank1 pocket coordinates
-
-**Batch Proteins:**
-1. Select "Batch Protein Pocket Prediction"
-2. Upload multiple PDB files at once
-3. Click "Start Batch Prediction"
-4. Download the summary pocket prediction CSV file — **this file is needed for subsequent batch docking**
+| Algorithm | Use | Paper / Repo |
+|-----------|-----|--------------|
+| [Uni-Mol Docking v2](https://arxiv.org/abs/2405.11769) | Docking | Towards Accurate and Efficient Molecular Docking |
+| [PocketFormer](https://github.com/pfnet-research/pocket_detection) | Pocket detection | Ishitani et al., *Protein ligand binding site prediction using graph transformer neural network* |
+| [PLANET](https://pubs.acs.org/doi/10.1021/acs.jcim.3c00253) | Affinity | Protein-Ligand Binding Affinity Prediction |
 
 ---
 
-### Step 3: Molecular Docking
-
-#### Single Docking
-
-1. Click "Molecular Docking" in the sidebar
-2. Upload protein PDB and ligand SDF files
-3. Set docking grid parameters:
-   - If pocket prediction was performed previously, uploading a CSV file will automatically populate coordinates
-   - Or manually enter center coordinates (center_x/y/z) and box size (size_x/y/z)
-4. Click "Start Docking"
-5. Wait for calculation to complete (usually a few minutes) and view 3D visualization results
-6. Download the docking result SDF file
-
-#### Batch Docking
-
-1. Click "Batch Molecular Docking" in the sidebar
-2. First upload the **batch pocket prediction CSV file** generated previously
-3. Then upload all protein (PDB) and ligand (SDF) files
-4. The system automatically generates docking task list (each protein × each ligand = one task)
-5. Download the task CSV template; you can edit the `Run` column to `Yes/No` to control which tasks to run
-6. Upload the modified CSV and click "Start Batch Docking"
-7. **Remember the task ID** (format like `a690c342`); the backend will execute asynchronously
-
----
-
-### Step 4: View and Manage Tasks
-
-**Method A: Query on the "Batch Molecular Docking" page**
-1. Enter task ID in the "Task Query" area at the top of the page
-2. View status, logs, and download result packages
-
-**Method B: Centrally view on the "Task Management" page**
-1. Click "Task Management" in the sidebar
-2. View all historical task list (✅ Completed / 🔄 Running / ❌ Failed)
-3. Sort by time or name
-4. Expand tasks to view detailed logs
-5. Download result ZIP packages
-6. Select specific docking results for 3D visualization
-
----
-
-### Step 5: Predict Affinity
-
-> Objective: Assess the binding strength of protein-ligand complexes
-
-1. Click "Predict Affinity" in the sidebar
-2. In the "Affinity Prediction" tab:
-   - Single prediction: Upload one pair of PDB + SDF files
-   - Batch prediction: Upload multiple protein and ligand files; the system automatically matches them by filename
-3. In the "Data View" tab:
-   - View prediction result tables
-   - Data distribution histograms and box plots
-   - Download CSV results
-4. In the "Heatmap Generation" tab:
-   - Customize heatmap color schemes, dimensions, and color bar ranges
-   - Generate protein-ligand affinity matrix heatmap
-   - Download heatmap image
-
----
-
-## Frequently Asked Questions
-
-**Q: Page is blank or shows `ModuleNotFoundError` error after launch**
-A: Check if the correct virtual environment is activated and confirm all pip dependencies are installed.
-
-**Q: Pocket prediction shows `java: command not found` error**
-A: P2Rank depends on Java runtime environment. Please install JDK 8 or higher.
-
-**Q: Docking calculation is very slow**
-A: Uni-Mol Docking v2 runs slowly on CPU; CUDA GPU is strongly recommended. A single docking task typically takes minutes on GPU but may require significantly longer on CPU.
-
-**Q: Batch docking task status keeps showing `running`**
-A: Check for error messages in the terminal. Common causes are missing model files or incorrect paths.
-
-**Q: `Uni-Core` installation fails**
-A: Ensure `ninja` is installed (`pip install ninja`) and PyTorch version matches your CUDA version. You may also try `pip install --no-build-isolation .`.
-
----
-
-## AI Algorithms Used
-
-| Algorithm | Purpose | Paper |
-|-----------|---------|-------|
-| [Uni-Mol Docking v2](https://arxiv.org/abs/2405.11769) | Molecular docking | Towards Accurate and Efficient Molecular Docking |
-| [P2Rank](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-018-0285-8) | Pocket prediction | P2Rank: machine learning based tool for rapid and accurate prediction of ligand binding sites |
-| [PLANET](https://pubs.acs.org/doi/10.1021/acs.jcim.3c00253) | Affinity prediction | Protein-Ligand Binding Affinity Prediction |
-
----
-
-## Project Structure
+## Project structure
 
 ```
 FLASH_DOCK/
-├── FlashDock_0315.py              # Main program (latest version, run this directly)
-├── FlashDock_web.py               # Original web program (reference only)
-├── README.md
-├── Batch_Docking/                 # Batch docking example input files
-│   ├── receptor1~4.pdb
-│   └── ligand1~4.sdf
-├── Result/                        # Single run result output directory
-│   ├── Binding_Affinity/
-│   ├── Docking_Result/
-│   ├── Predict_Pocket/
-│   └── Prepare_Ligand/
-├── jobs/                          # Backend task directory (auto-generated, can be cleared)
-├── examples/                      # Example data
-│   └── examples.zip
-└── others/                        # Third-party tools and models
-    ├── Uni-Mol/                   # Uni-Mol docking model
-    │   └── unimol_docking_v2/
-    │       ├── interface/demo.py  # Docking entry script
-    │       └── *.pt              # Model weights (download required)
-    ├── PLANET/                    # Affinity prediction model
-    │   ├── pred.py               # Prediction entry script
-    │   └── PLANET.param          # Model parameters (download required)
-    ├── p2rank_2.5/                # Pocket prediction tool
-    │   └── prank                  # Executable file (Java required)
-    ├── Uni-Core/                  # PyTorch underlying framework
-    ├── flashdock.png              # Application logo
-    ├── author.png                 # Original author information
-    └── author2.png                # Contributor information
+├── app.py                    # entry: streamlit run app.py
+├── requirements.txt          # main env
+├── environment-pocket.yml    # isolated pocket env
+├── setup.sh                  # one-shot install & launch
+├── .streamlit/config.toml    # theme
+├── ui/theme.py               # theme + components
+├── pocket/pocketformer.py    # PocketFormer adapter
+├── lang/                     # i18n (zh / en / ja)
+├── Batch_Docking/ · examples/
+└── others/                   # Uni-Mol · pocket_detection · PLANET · Uni-Core
 ```
 
 ---
 
-## Acknowledgments
+## Acknowledgements
 
-- Original project author: [小闪电-FLASH (Neo-Flash)](https://github.com/Neo-Flash/FLASH_DOCK)
-- [Uni-Mol Docking v2](https://github.com/deepmodeling/Uni-Mol) - Molecular docking engine
-- [P2Rank](https://github.com/rdk/p2rank) - Pocket prediction tool
-- [PLANET](https://github.com/ComputArtCMCG/PLANET) - Affinity prediction model
-- [Streamlit](https://streamlit.io/) - Web application framework
+[Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) · [Uni-Mol](https://github.com/deepmodeling/Uni-Mol) · [PocketFormer (Preferred Networks)](https://github.com/pfnet-research/pocket_detection) · [PLANET](https://github.com/ComputArtCMCG/PLANET) · [fpocket](https://github.com/Discngine/fpocket) · [Streamlit](https://streamlit.io/)
 
----
+## Authors
 
-## Authors and Contributors
-
-**Original Author**: 小闪电-FLASH (Neo-Flash)
-East China University of Science and Technology (华东理工大学) School of Pharmacy | East China Normal University (华东师范大学) School of Computer Science and Technology
-Email: 52265901016@stu.ecnu.edu.cn
-GitHub: [Neo-Flash](https://github.com/Neo-Flash)
-
-**Modifications and Optimization**: Nuki
-Tokyo Medical and Dental University (東京医科齿科大学) (2023-2024) | Tokyo Science University (東京科学大学) (2024-2026)
-Email: ma240306@tmd.ac.jp
-
----
+**Original:** 小闪电-FLASH (Neo-Flash) · [GitHub](https://github.com/Neo-Flash)
+**Refactor:** Nuki · Institute of Science Tokyo · ma240306@tmd.ac.jp
 
 ## License
-
-This project is based on modifications to [Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK). Please comply with the license agreement of the original project.
+Based on [Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK); PocketFormer is MIT. Follow each upstream project's license.
