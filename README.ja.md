@@ -2,319 +2,144 @@
 
 # FLASH_DOCK ⚡️
 
-> AI駆動型オールインワン分子ドッキングプラットフォーム | AI-Powered Molecular Docking Platform
+> AI による分子ドッキング統合プラットフォーム
 >
-> 🌐 アプリ内で多言語対応（中文 / English / 日本語）— サイドバーで切り替え可能
+> 🌐 多言語UI内蔵（中文 / English / 日本語）、サイドバーで切替
 
-FLASH_DOCK は、Streamlit で構築された計算化学 Web アプリケーションです。リガンド準備、ポケット予測、分子ドッキング、結合親和性予測などの機能を統合し、医薬品発見研究向けのすぐに使用できるグラフィカルインターフェースを提供します。
-
-本プロジェクトは [Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) からフォークされており、元のバージョンをベースに機能拡張と最適化を行っています。
+FLASH_DOCK は **リガンド準備 → ポケット検出 → ドッキング → 親和性予測** の
+ワークフロー全体を、すぐ使える GUI にまとめた Streamlit アプリです。
+[Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) をフォークし再構築しました。
 
 ---
 
-## 元のバージョンとの主な相違点
+## 本バージョン（by Nuki）の主な変更
 
-このバージョン（by Nuki）は、元のバージョンをベースに以下の内容を追加・最適化しました：
-
-| 変更項目 | 説明 |
+| 変更点 | 内容 |
 |--------|------|
-| **タスク管理モジュール** | 新しい「タスク管理」ページで、すべてのバックグラウンドドッキングタスクのステータス（完了/実行中/失敗）を確認でき、時間または名前でソート可能、結果パッケージを直接ダウンロードして3D可視化を表示できます |
-| **バッチドッキング結果の可視化** | バッチ分子ドッキングページに3D可視化機能を新たに追加し、タンパク質PDBとリガンドSDFを自動マッチングして表示します |
-| **タスク数制限** | バッチドッキングタスク数の上限チェック（200個）を新たに追加し、サーバー過負荷を回避します |
-| **タスクログの強化** | 各ドッキングタスクに詳細な実行ログがあり、座標情報、成功/失敗ステータスを記録します |
-| **多言語サポート (i18n)** | 中文/英語/日本語の3言語サポートを新たに追加し、サイドバーで1クリック切り替え可能、翻訳ファイルは `lang/` ディレクトリにあり、新言語の追加は簡単です |
-| **コード構造の最適化** | パスワード埋め込みを削除してコード構造を再構築し、コードがより明確で読みやすくなりました |
+| **ポケット検出を PocketFormer に** | P2Rank を [PocketFormer](https://github.com/pfnet-research/pocket_detection)（グラフTransformer + fpocket）に置換。アンサンブルスコアで並べた口袋と中心座標を出力。**Java 依存を廃止。** |
+| **UI のモダン化** | 一貫した「科学計測器」デザイン：パイプライン段階ヘッダー、座標/スコアの等幅表示、アイコンナビ、カードUI。 |
+| **すぐ動く** | 新しい `requirements.txt` / `environment-pocket.yml`、`setup.sh` が2つの環境を作り重みも自動取得。 |
+| **コード整理** | 重複バナーや冗長 import を除去。`ui/`（テーマ+部品）と `pocket/`（PocketFormerアダプタ）を分離。 |
+| **多言語 (i18n)** | 中 / 英 / 日、ワンクリック切替。翻訳は `lang/`。 |
+
+> ロードマップ：スクリーニングをより大規模・高速に。まず **Apple MPS**、次に **NVIDIA CUDA**。推論デバイスは既に設定可能（CPU / MPS / CUDA）で、加速は今後のリリースで対応。
 
 ---
 
-## 機能概要
+## 機能
 
-FLASH_DOCK は **6 つの機能モジュール** を提供し、リガンド準備から親和性分析までの完全なワークフローをカバーしています：
-
-### 1. リガンド準備
-SDF ファイルをアップロード、オンラインで分子を描画（Ketcher）、または SMILES を直接入力して、最適化された 3D 構象を自動生成（ETKDG + MMFF 力場）します。CSV ファイル内の SMILES データのバッチ処理に対応しています。
-
-### 2. ポケット予測
-P2Rank アルゴリズムに基づいてタンパク質結合ポケットを自動予測し、単一および複数タンパク質予測に対応、ポケット中心座標の CSV ファイルを出力して、その後のドッキングに直接使用できます。
-
-### 3. 分子ドッキング
-Uni-Mol Docking v2 モデルに基づき、タンパク質（PDB）とリガンド（SDF）をアップロードすると、ポケット予測 CSV を自動読み込みしてドッキングパラメータを入力、またはドッキングボックスを手動で調整することもできます。
-
-### 4. バッチ分子ドッキング
-複数タンパク質 × 複数リガンドのバッチドッキング、バックグラウンド非同期処理でページをブロックしない、UUID タスク ID で追跡、結果を自動的に ZIP ファイルにパッケージ化します。
-
-### 5. 結合親和性予測
-PLANET モデルに基づいて結合親和性を予測し、単一および複数予測に対応、3 つのタブ：親和性予測 / データ表示 / ヒートマップ生成があります。
-
-### 6. タスク管理（新機能）
-すべてのバックグラウンドドッキングタスクを集中管理、ステータスアイコン（✅🔄❌）、時間/名前でソート、結果パッケージを1クリックでダウンロード、ドッキング結果を3D可視化できます。
+| # | モジュール | 説明 |
+|---|-----------|------|
+| 1 | **リガンド準備** | SDFアップロード / 描画(Ketcher) / SMILES → 最適化3D配座（ETKDG + MMFF）、CSV一括対応 |
+| 2 | **ポケット検出** | PocketFormer で結合ポケットを検出し、中心座標CSVを出力（単体 + 一括） |
+| 3 | **ドッキング** | Uni-Mol Docking v2。ポケットCSVからグリッド自動入力、または手動設定 |
+| 4 | **一括ドッキング** | 多タンパク質 × 多リガンドをバックグラウンド非同期実行、UUID追跡、ZIP出力 |
+| 5 | **親和性予測** | PLANET による結合親和性予測、データ表示とヒートマップ生成 |
+| 6 | **タスク管理** | バックグラウンドジョブの確認・DL・3D可視化 |
 
 ---
 
-## クイックスタート（ワンクリック インストール）
+## アーキテクチャ：なぜ環境が2つか
 
-### 前提条件
+PocketFormer は本体（Streamlit + Uni-Mol/Uni-Core）と衝突する古め/別系統のスタック
+（torch + PyG + fpocket）に依存します。そこで PocketFormer は **独立した conda 環境** で動かし、
+本体から **サブプロセス** として呼び出します（Uni-Mol・PLANET と同じ方式）。
 
-開始する前に、システムに以下がインストールされていることを確認してください：
-- **Python 3.8+**
-- **Java 8+**（P2Rank ポケット予測に必要。インストール方法：Ubuntu `sudo apt install default-jdk` / macOS `brew install openjdk`）
-- **CUDA GPU**（オプションですが、ドッキング計算を大幅に高速化するため強く推奨）
+| 環境 | 用途 | 主な依存 |
+|------|------|----------|
+| `flash_dock`（本体） | Streamlit UI + Uni-Mol + PLANET | Python 3.9, torch, streamlit, rdkit, unicore |
+| `flashdock-pocket`（隔離） | PocketFormer のみ | Python 3.10, torch<2.6, PyG 2.5.3, pytorch_scatter/cluster, fpocket 4.2 |
 
-### インストール手順
+---
+
+## クイックスタート
+
+### 前提
+- **conda または mamba**（[Miniforge](https://github.com/conda-forge/miniforge) 推奨）
+- **Python 3.9+**
+- GPU は任意：NVIDIA CUDA は自動有効、Apple Silicon は MPS/CPU
+
+> Java は不要になりました — ポケット検出は fpocket を使用（`setup.sh` が隔離環境に導入）。
 
 ```bash
-# 1. プロジェクトをクローン
 git clone https://github.com/AIChemist-Nuki/FLASH_DOCK.git
 cd FLASH_DOCK
-
-# 2. Uni-Mol Docking v2 モデルウェイトをダウンロード（約 465MB）
-#    ダウンロードURL: https://github.com/deepmodeling/Uni-Mol/releases
-#    unimol_docking_v2_240517.pt を見つけて任意の場所にダウンロード
-
-# 3. 仮想環境を作成（推奨）
-conda create -n flashdock python=3.9 -y
-conda activate flashdock
-
-# 4. ワンクリック インストールと起動（モデルウェイトパスを指定）
+conda create -n flash_dock python=3.9 -y && conda activate flash_dock
 bash setup.sh /path/to/unimol_docking_v2_240517.pt
 ```
 
-`setup.sh` は以下のすべてを自動的に完了します：
-- システム環境をチェック（Python、Java、CUDA）
-- モデルウェイトを正しい場所にコピー
-- PyTorch をインストール（CUDA/CPU に自動適応）
-- Uni-Core フレームワークをコンパイルしてインストール
-- すべての Python 依存関係をインストール
-- P2Rank と PLANET モデルをチェック
-- インストール状態の概要を印字
-- Streamlit アプリケーションを起動
+`setup.sh` は本体依存 + PyTorch + Uni-Core を導入し、隔離環境 `flashdock-pocket`（fpocket込み）を作成、
+PocketFormer の重みを Zenodo から取得（約396MB）、Uni-Mol 重みを配置して
+`http://localhost:8501` で起動します。
 
-起動に成功するとブラウザが自動的に `http://localhost:8501` を開きます。
-
-### その後の起動
-
-最初のインストール完了後、以降は以下を実行するだけです：
-
-```bash
-conda activate flashdock
-bash setup.sh
-```
-
-スクリプトは既にインストールされた依存関係をスキップし、アプリケーションを直接起動します。
+2回目以降：`conda activate flash_dock && bash setup.sh`（または `streamlit run app.py`）。
 
 ---
 
-### 手動インストール（スクリプトが適用できない場合）
+## モデルファイル
 
-<details>
-<summary>手動インストール手順をクリックして展開</summary>
+| モデル | サイズ | 同梱 | 用途 | 入手 |
+|--------|--------|------|------|------|
+| `unimol_docking_v2_240517.pt` | 465MB | ❌ 要DL | ドッキング | [Uni-Mol Releases](https://github.com/deepmodeling/Uni-Mol/releases) |
+| `fold0~4_best_model.pt` | 約396MB | ❌ 要DL | ポケット(PocketFormer) | Zenodo [10.5281/zenodo.13070037](https://doi.org/10.5281/zenodo.13070037)（`setup.sh`が自動取得） |
+| `PLANET.param` | 18MB | ✅ 同梱 | 親和性 | — |
 
-#### 1. PyTorch をインストール
+---
 
-ハードウェア環境に応じて https://pytorch.org/get-started/locally/ からインストール コマンドを取得します：
+## 手動インストール
 
-```bash
-# CUDA GPU がある場合:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-# CPU のみの場合:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-```
-
-#### 2. Uni-Core をインストール
+<details><summary>展開</summary>
 
 ```bash
-pip install ninja
-cd others/Uni-Core
-pip install .
-cd ../..
-```
+# A. 本体環境
+conda create -n flash_dock python=3.9 -y && conda activate flash_dock
+pip install -r requirements.txt
+pip install torch torchvision                  # ハードに合わせて選択
+pip install ninja && pip install ./others/Uni-Core
+# Uni-Mol 重みを others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt に配置
 
-コンパイルエラーが発生した場合は、[Uni-Core 公式リポジトリ](https://github.com/dptech-corp/Uni-Core) を参照してください。
+# B. ポケット環境
+conda env create -f environment-pocket.yml
+# Zenodo の best_models.tar.xz を DL し、fold0~4_best_model.pt を
+#   others/pocket_detection/examples/ に展開
 
-#### 3. その他の依存関係をインストール
-
-```bash
-pip install streamlit streamlit-molstar streamlit-ketcher py3Dmol stmol
-pip install rdkit-pypi pandas numpy scipy scikit-learn matplotlib seaborn
-pip install tqdm lmdb sh biopandas
-```
-
-#### 4. モデルウェイトを配置
-
-ダウンロードした `unimol_docking_v2_240517.pt` を以下の場所に配置します：
-
-```
-others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt
-```
-
-#### 5. P2Rank が実行可能であることを確認
-
-```bash
-chmod +x others/p2rank_2.5/prank
-```
-
-#### 6. 起動
-
-```bash
-streamlit run FlashDock_0315.py
+# C. 起動
+conda activate flash_dock && streamlit run app.py
 ```
 
 </details>
 
 ---
 
-### モデルファイルの説明
+## ワークフロー
 
-| モデル | サイズ | リポジトリに含まれる？ | 用途 |
-|------|------|----------------|------|
-| `unimol_docking_v2_240517.pt` | 465MB | ❌ 自分でダウンロード | 分子ドッキング（コア機能） |
-| `PLANET.param` | 18MB | ✅ 含まれています | 結合親和性予測 |
-| `p2rank_2.5/` | 292MB | ✅ 含まれています | ポケット予測 |
+**リガンド準備 → ポケット検出 → ドッキング →（一括）→ 親和性。**
+サンプルはホーム画面から取得できます。
 
-Uni-Mol モデル ダウンロード URL：[Uni-Mol Releases](https://github.com/deepmodeling/Uni-Mol/releases)
-
----
-
-## 使用チュートリアル
-
-### 典型的なワークフロー
-
-```
-リガンド準備 → ポケット予測 → 分子ドッキング → 結合親和性予測
-```
-
-以下は、完全な分子ドッキング実験の例で、ワークフロー全体を説明します。プロジェクトにはサンプルファイルが含まれており、ホームページの「サンプルファイルをダウンロード」をクリックして取得できます。
+1. **リガンド準備** — SDF / Ketcher / SMILES → 最適化3D SDF。一括は `mol_name`, `smiles` 列のCSV。
+2. **ポケット検出** — PDBをアップロード。単体は `best_pocket.csv`、一括は `Protein File / rank / center_x/y/z` のCSV（一括ドッキングにそのまま使える）を出力。中心は fpocket のポケット幾何から、並びは PocketFormer のアンサンブルスコア。
+3. **ドッキング** — タンパク質 + リガンドをアップロード。ポケットCSVでグリッド自動入力、または手動設定。可視化とDL。
+4. **一括ドッキング** — 一括ポケットCSV + 全タンパク質/リガンドをアップロード。`Run`列を編集して送信し、**ジョブID**を控える（バックグラウンド実行）。
+5. **タスク管理 / 親和性** — ジョブ状態（✅/🔄/❌）を確認・DL・可視化。PLANET で親和性予測とヒートマップ。
 
 ---
 
-### ステップ 1: リガンド準備
+## FAQ
 
-> 目的：小分子を最適化された 3D 構象を持つ SDF ファイルに変換する
-
-**方法 A：SDF ファイルをアップロード**
-1. サイドバーの「リガンド準備」をクリック
-2. 「単分子処理」タブで SDF ファイルをアップロード
-3. システムが自動的に 2D と 3D 分子構造を表示
-4. 「3D分子のSDFファイルをダウンロード」をクリックして結果を保存
-
-**方法 B：分子を描画または SMILES を入力**
-1. Ketcher エディタで分子構造を描画、または SMILES 文字列を直接貼り付け
-2. システムが自動的に 3D 構象を生成（ETKDG アルゴリズム + MMFF 力場最適化）
-3. 生成された SDF ファイルをダウンロード
-
-**方法 C：バッチ処理**
-1. 「バッチ処理」タブに切り替え
-2. SMILES 列を含む CSV ファイルをアップロード
-3. システムがすべての分子の 3D 構造をバッチ生成
-4. 結果をダウンロード
+- **fpocket / 重みが無い？** `setup.sh` か `environment-pocket.yml` で `flashdock-pocket` を作成し、`others/pocket_detection/examples/` に `fold0~4_best_model.pt` があるか確認。`FLASHDOCK_POCKET_PYTHON` でインタプリタを上書き可能。
+- **ドッキングが遅い？** Uni-Mol は CPU だと遅い。CUDA GPU 推奨（Apple加速は今後）。
+- **ジョブが `running` のまま？** ターミナルを確認。多くは重み欠如やパス誤り。
+- **Uni-Core のビルド失敗？** まず `pip install ninja`、torch/CUDA を一致させ、`--no-build-isolation` も試す。
 
 ---
 
-### ステップ 2: ポケット予測
+## 使用しているAIアルゴリズム
 
-> 目的：タンパク質上で小分子が結合する可能性が最も高い場所（ポケット）を見つける
-
-**単一タンパク質：**
-1. サイドバーの「ポケット予測」をクリック
-2. 「単一タンパク質ポケット予測」を選択
-3. タンパク質 PDB ファイルをアップロード（または「サンプルタンパク質を読み込む」で素早く体験）
-4. システムが P2Rank を使用してポケット位置を予測
-5. ポケット中心座標表を表示し、rank1 ポケットの座標を記録
-
-**複数タンパク質：**
-1. 「バッチタンパク質ポケット予測」を選択
-2. 複数の PDB ファイルを一度にアップロード
-3. 「バッチ予測を開始」をクリック
-4. 要約されたポケット予測 CSV ファイルをダウンロード — **その後のバッチドッキングに必要なファイル**
-
----
-
-### ステップ 3: 分子ドッキング
-
-#### 単一ドッキング
-
-1. サイドバーの「分子ドッキング」をクリック
-2. タンパク質 PDB とリガンド SDF ファイルをアップロード
-3. ドッキンググリッド パラメータを設定：
-   - 以前ポケット予測を行った場合、CSV ファイルをアップロードして座標を自動入力
-   - または、中心座標（center_x/y/z）とボックスサイズ（size_x/y/z）を手動で入力
-4. 「ドッキングを開始」をクリック
-5. 計算完了を待ちます（通常は数分）、3D 可視化結果を表示
-6. ドッキング結果 SDF ファイルをダウンロード
-
-#### バッチドッキング
-
-1. サイドバーの「バッチ分子ドッキング」をクリック
-2. 先ほど生成した**バッチポケット予測 CSV ファイル**をアップロード
-3. すべてのタンパク質（PDB）とリガンド（SDF）ファイルをアップロード
-4. システムが自動的にドッキング タスク リストを生成（各タンパク質 × 各リガンド = 1 つのタスク）
-5. タスク CSV テンプレートをダウンロードし、`Run` 列を編集して `Yes/No` で実行対象を制御
-6. 修正した CSV をアップロードして「バッチドッキングを開始」をクリック
-7. **タスク ID を記憶** してください（形式：`a690c342`）、バックグラウンドで非同期実行
-
----
-
-### ステップ 4: タスク表示と管理
-
-**方法 A：「バッチ分子ドッキング」ページでクエリ**
-1. ページ上部の「タスク クエリ」エリアにタスク ID を入力
-2. ステータス、ログを表示、結果パッケージをダウンロード
-
-**方法 B：「タスク管理」ページで一元管理**
-1. サイドバーの「タスク管理」をクリック
-2. すべての履歴タスク リストを表示（✅ 完了 / 🔄 実行中 / ❌ 失敗）
-3. 時間または名前でソート
-4. タスクを展開して詳細ログを表示
-5. 結果 ZIP パッケージをダウンロード
-6. 具体的なドッキング結果を選択して 3D 可視化
-
----
-
-### ステップ 5: 結合親和性予測
-
-> 目的：タンパク質-リガンドの結合強度を評価する
-
-1. サイドバーの「予測親和性」をクリック
-2. 「親和性予測」タブ内：
-   - 単一予測：1 対の PDB + SDF ファイルをアップロード
-   - バッチ予測：複数のタンパク質とリガンド ファイルをアップロード、システムはファイル名で自動マッチング
-3. 「データ表示」タブ内：
-   - 予測結果テーブルを表示
-   - データ分布ヒストグラムとボックスプロット
-   - CSV 結果をダウンロード
-4. 「ヒートマップ生成」タブ内：
-   - ヒートマップの色スキーム、サイズ、カラーバー範囲をカスタマイズ
-   - タンパク質-リガンド親和性マトリックス ヒートマップを生成
-   - ヒートマップ画像をダウンロード
-
----
-
-## よくある質問
-
-**Q: 起動後にページが空白または `ModuleNotFoundError` エラーが表示される**
-A: 正しい仮想環境が有効化されているか確認し、すべての pip 依存関係がインストールされていることを確認してください。
-
-**Q: ポケット予測が `java: command not found` エラーを報告する**
-A: P2Rank は Java ランタイム環境に依存しているため、JDK 8 以上をインストールしてください。
-
-**Q: ドッキング計算が非常に遅い**
-A: Uni-Mol Docking v2 は CPU 上で実行すると遅く、CUDA GPU の使用を強く推奨します。GPU 上の単一ドッキング タスクは通常数分、CPU 上ではより長い時間がかかる場合があります。
-
-**Q: バッチドッキング タスク ステータスが常に `running` と表示される**
-A: ターミナルにエラー メッセージがないか確認してください。一般的な原因はモデル ファイルの欠落またはパス が不正です。
-
-**Q: `Uni-Core` インストールが失敗**
-A: `ninja` がインストールされていることを確認してください（`pip install ninja`）、PyTorch バージョンが CUDA バージョンと一致しているか確認してください。`pip install --no-build-isolation .` を試すこともできます。
-
----
-
-## 使用される AI アルゴリズム
-
-| アルゴリズム | 用途 | 論文 |
-|------|------|------|
-| [Uni-Mol Docking v2](https://arxiv.org/abs/2405.11769) | 分子ドッキング | Towards Accurate and Efficient Molecular Docking |
-| [P2Rank](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-018-0285-8) | ポケット予測 | P2Rank: machine learning based tool for rapid and accurate prediction of ligand binding sites |
-| [PLANET](https://pubs.acs.org/doi/10.1021/acs.jcim.3c00253) | 結合親和性予測 | Protein-Ligand Binding Affinity Prediction |
+| アルゴリズム | 用途 | 論文 / リポジトリ |
+|--------------|------|-------------------|
+| [Uni-Mol Docking v2](https://arxiv.org/abs/2405.11769) | ドッキング | Towards Accurate and Efficient Molecular Docking |
+| [PocketFormer](https://github.com/pfnet-research/pocket_detection) | ポケット検出 | Ishitani et al., *Protein ligand binding site prediction using graph transformer neural network* |
+| [PLANET](https://pubs.acs.org/doi/10.1021/acs.jcim.3c00253) | 親和性予測 | Protein-Ligand Binding Affinity Prediction |
 
 ---
 
@@ -322,61 +147,28 @@ A: `ninja` がインストールされていることを確認してください
 
 ```
 FLASH_DOCK/
-├── FlashDock_0315.py              # メイン プログラム（最新バージョン、これを直接実行）
-├── FlashDock_web.py               # オリジナル Web プログラム（参考用）
-├── README.md
-├── Batch_Docking/                 # バッチドッキング サンプル入力ファイル
-│   ├── receptor1~4.pdb
-│   └── ligand1~4.sdf
-├── Result/                        # 単一実行結果出力ディレクトリ
-│   ├── Binding_Affinity/
-│   ├── Docking_Result/
-│   ├── Predict_Pocket/
-│   └── Prepare_Ligand/
-├── jobs/                          # バックグラウンド タスク ディレクトリ（自動生成、クリア可能）
-├── examples/                      # サンプル データ
-│   └── examples.zip
-└── others/                        # サード パーティ ツールとモデル
-    ├── Uni-Mol/                   # Uni-Mol ドッキング モデル
-    │   └── unimol_docking_v2/
-    │       ├── interface/demo.py  # ドッキング エントリー スクリプト
-    │       └── *.pt              # モデル ウェイト（ダウンロード必須）
-    ├── PLANET/                    # 結合親和性予測 モデル
-    │   ├── pred.py               # 予測 エントリー スクリプト
-    │   └── PLANET.param          # モデル パラメータ（ダウンロード必須）
-    ├── p2rank_2.5/                # ポケット予測 ツール
-    │   └── prank                  # 実行可能ファイル（Java が必須）
-    ├── Uni-Core/                  # PyTorch 基盤フレームワーク
-    ├── flashdock.png              # アプリケーション ロゴ
-    ├── author.png                 # 元作者情報
-    └── author2.png                # 貢献者情報
+├── app.py                    # 起動：streamlit run app.py
+├── requirements.txt          # 本体環境
+├── environment-pocket.yml    # 隔離ポケット環境
+├── setup.sh                  # 一括インストール&起動
+├── .streamlit/config.toml    # テーマ
+├── ui/theme.py               # テーマ + 部品
+├── pocket/pocketformer.py    # PocketFormer アダプタ
+├── lang/                     # i18n (zh / en / ja)
+├── Batch_Docking/ · examples/
+└── others/                   # Uni-Mol · pocket_detection · PLANET · Uni-Core
 ```
 
 ---
 
 ## 謝辞
 
-- オリジナル プロジェクト作成者：[小闪电-FLASH (Neo-Flash)](https://github.com/Neo-Flash/FLASH_DOCK)
-- [Uni-Mol Docking v2](https://github.com/deepmodeling/Uni-Mol) - 分子ドッキング エンジン
-- [P2Rank](https://github.com/rdk/p2rank) - ポケット予測 ツール
-- [PLANET](https://github.com/ComputArtCMCG/PLANET) - 結合親和性予測 モデル
-- [Streamlit](https://streamlit.io/) - Web アプリケーション フレームワーク
+[Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) · [Uni-Mol](https://github.com/deepmodeling/Uni-Mol) · [PocketFormer (Preferred Networks)](https://github.com/pfnet-research/pocket_detection) · [PLANET](https://github.com/ComputArtCMCG/PLANET) · [fpocket](https://github.com/Discngine/fpocket) · [Streamlit](https://streamlit.io/)
 
----
+## 作者
 
-## 作成者および貢献者
+**原作者:** 小闪电-FLASH (Neo-Flash) · [GitHub](https://github.com/Neo-Flash)
+**改修:** Nuki · 東京科学大学 · ma240306@tmd.ac.jp
 
-**元作者**: 小闪电-FLASH (Neo-Flash)
-華東理工大学 薬学部 | 華東師範大学 コンピュータ科学・テクノロジー学部
-Email: 52265901016@stu.ecnu.edu.cn
-GitHub: [Neo-Flash](https://github.com/Neo-Flash)
-
-**修正と最適化**: Nuki
-東京医科歯科大学 (2023-2024) | 東京科学大学 (2024-2026)
-Email: ma240306@tmd.ac.jp
-
----
-
-## ライセンス
-
-このプロジェクトは [Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) を修正しています。元のプロジェクトのライセンス契約に従ってください。
+## License
+[Neo-Flash/FLASH_DOCK](https://github.com/Neo-Flash/FLASH_DOCK) をベースに改修。PocketFormer は MIT。各上流プロジェクトのライセンスに従ってください。

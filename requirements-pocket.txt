@@ -1,0 +1,17 @@
+# ============================================================
+# FLASH_DOCK — PocketFormer env, PIP layer only (reference).
+#
+# Prefer `environment-pocket.yml` (conda) for a full, reproducible env:
+# torch, pytorch_scatter, fpocket, scipy and scikit-learn must come from
+# conda-forge (no working pip wheels on Apple Silicon for this stack).
+#
+# These are the packages installed via pip AFTER the conda layer:
+# ============================================================
+torch_geometric==2.5.3
+freesasa==2.2.1
+omegaconf==2.3.0
+pandas==2.2.2
+torchmetrics==1.4.0.post0
+biopython==1.84
+torchinfo
+tqdm

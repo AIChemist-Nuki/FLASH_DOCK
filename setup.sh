@@ -1,273 +1,191 @@
 #!/bin/bash
 # ============================================================
-# FLASH_DOCK 一键安装启动脚本
-# 用法: bash setup.sh [模型权重文件路径]
+# FLASH_DOCK — one-shot install & launch
 #
-# 示例:
-#   bash setup.sh ~/Downloads/unimol_docking_v2_240517.pt
-#   bash setup.sh   (跳过权重安装，仅安装依赖并启动)
+# Usage:
+#   bash setup.sh [path/to/unimol_docking_v2_240517.pt]
+#
+#   bash setup.sh ~/Downloads/unimol_docking_v2_240517.pt   # place Uni-Mol weight + install + run
+#   bash setup.sh                                            # install (skip weight copy) + run
+#
+# What it does:
+#   1. checks conda/mamba + hardware (CUDA / Apple MPS / CPU)
+#   2. installs the MAIN app env (requirements.txt + PyTorch + Uni-Core)
+#   3. creates the ISOLATED PocketFormer env from environment-pocket.yml
+#   4. fetches model weights (Uni-Mol from arg; PocketFormer from Zenodo)
+#   5. prints a status summary and launches the app
 # ============================================================
-
 set -e
 
-# ---------- 颜色输出 ----------
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# ---------- 获取脚本所在目录 ----------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+POCKET_ENV="flashdock-pocket"
+POCKET_EXAMPLES="$SCRIPT_DIR/others/pocket_detection/examples"
+ZENODO_WEIGHTS_URL="https://zenodo.org/records/13070037/files/best_models.tar.xz?download=1"
+UNIMOL_TARGET="$SCRIPT_DIR/others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt"
+
 echo ""
 echo "========================================"
-echo "  ⚡️ FLASH_DOCK 安装与启动脚本 ⚡️"
+echo "  ⚡️ FLASH_DOCK  setup ⚡️"
 echo "========================================"
 echo ""
 
-# ============================================================
-# 1. 检查前置条件
-# ============================================================
-info "正在检查系统环境..."
+# ------------------------------------------------------------
+# 1. environment + hardware
+# ------------------------------------------------------------
+info "Checking toolchain & hardware..."
 
-# 检查 Python
-if command -v python3 &>/dev/null; then
-    PY_VERSION=$(python3 --version 2>&1)
-    success "Python: $PY_VERSION"
-else
-    error "未找到 python3，请先安装 Python 3.8+"
-    exit 1
-fi
+if command -v mamba &>/dev/null; then SOLVER="mamba"
+elif command -v conda &>/dev/null; then SOLVER="conda"
+else error "conda/mamba not found. Install Miniforge: https://github.com/conda-forge/miniforge"; exit 1; fi
+success "conda solver: $SOLVER"
 
-# 检查 pip
-if command -v pip3 &>/dev/null || python3 -m pip --version &>/dev/null 2>&1; then
-    success "pip: 可用"
-else
-    error "未找到 pip，请先安装 pip"
-    exit 1
-fi
+if command -v python3 &>/dev/null; then success "Python: $(python3 --version 2>&1)"
+else error "python3 not found"; exit 1; fi
 
-# 检查 Java
-if command -v java &>/dev/null; then
-    JAVA_VERSION=$(java -version 2>&1 | head -1)
-    success "Java: $JAVA_VERSION"
-else
-    warn "未找到 Java。口袋预测(P2Rank)功能将不可用。"
-    warn "安装方法: sudo apt install default-jdk (Ubuntu) / brew install openjdk (macOS)"
-fi
-
-# 检查 CUDA
+ACCEL="cpu"
 if command -v nvidia-smi &>/dev/null; then
-    GPU_INFO=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-    success "GPU: $GPU_INFO (将使用 CUDA 加速)"
-    HAS_CUDA=true
+    ACCEL="cuda"; success "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1) (CUDA)"
+elif [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    ACCEL="mps"; success "Apple Silicon detected (MPS available for supported ops)"
 else
-    warn "未检测到 CUDA GPU，将使用 CPU 模式（对接速度会较慢）"
-    HAS_CUDA=false
+    warn "No CUDA GPU; using CPU (docking will be slower)"
 fi
-
 echo ""
 
-# ============================================================
-# 2. 处理模型权重文件
-# ============================================================
-MODEL_TARGET="$SCRIPT_DIR/others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt"
+# ------------------------------------------------------------
+# 2. MAIN app env (assumes you've activated your app env)
+# ------------------------------------------------------------
+if [ -z "$CONDA_DEFAULT_ENV" ] && [ -z "$VIRTUAL_ENV" ]; then
+    warn "No active virtualenv/conda env detected."
+    warn "Recommended:  conda create -n flash_dock python=3.9 -y && conda activate flash_dock"
+    warn "Then re-run this script. Continuing may install into 'base'."
+fi
 
+info "Installing main app dependencies (requirements.txt)..."
+python3 -m pip install -r requirements.txt 2>&1 | tail -3
+success "App dependencies installed"
+
+# PyTorch (platform-specific)
+if ! python3 -c "import torch" 2>/dev/null; then
+    info "Installing PyTorch for: $ACCEL"
+    case "$ACCEL" in
+        cuda) python3 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118 2>&1 | tail -2 ;;
+        mps)  python3 -m pip install torch torchvision 2>&1 | tail -2 ;;            # default wheels ship MPS on macOS
+        *)    python3 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu 2>&1 | tail -2 ;;
+    esac
+    success "PyTorch installed"
+else
+    success "PyTorch already installed"
+fi
+
+# Uni-Core (compiled against your torch)
+if ! python3 -c "import unicore" 2>/dev/null; then
+    info "Installing Uni-Core (may take a few minutes)..."
+    python3 -m pip install ninja 2>&1 | tail -1
+    ( cd "$SCRIPT_DIR/others/Uni-Core" && python3 -m pip install . 2>&1 | tail -3 )
+    success "Uni-Core installed"
+else
+    success "Uni-Core already installed"
+fi
+echo ""
+
+# ------------------------------------------------------------
+# 3. PocketFormer isolated env
+# ------------------------------------------------------------
+if $SOLVER env list | grep -qE "^\s*${POCKET_ENV}\s|/${POCKET_ENV}$"; then
+    success "PocketFormer env '${POCKET_ENV}' already exists"
+else
+    info "Creating PocketFormer env '${POCKET_ENV}' from environment-pocket.yml..."
+    $SOLVER env create -f environment-pocket.yml
+    success "PocketFormer env created"
+fi
+
+# fpocket lives inside the pocket env
+if conda run -n "$POCKET_ENV" bash -c "command -v fpocket" &>/dev/null; then
+    success "fpocket present in '${POCKET_ENV}'"
+else
+    warn "fpocket not found in '${POCKET_ENV}'. Try: $SOLVER install -n ${POCKET_ENV} -c conda-forge fpocket=4.2"
+fi
+echo ""
+
+# ------------------------------------------------------------
+# 4. model weights
+# ------------------------------------------------------------
+# Uni-Mol docking weight
 if [ -n "$1" ]; then
-    MODEL_SRC="$1"
-    info "正在处理模型权重文件..."
-
-    if [ ! -f "$MODEL_SRC" ]; then
-        error "文件不存在: $MODEL_SRC"
-        exit 1
-    fi
-
-    # 检查文件名
-    BASENAME=$(basename "$MODEL_SRC")
-    if [[ "$BASENAME" != *".pt" ]]; then
-        warn "文件 $BASENAME 不是 .pt 格式，请确认是否为正确的模型文件"
-    fi
-
-    # 创建目标目录
-    mkdir -p "$(dirname "$MODEL_TARGET")"
-
-    # 复制或移动模型文件
-    if [ "$(realpath "$MODEL_SRC")" != "$(realpath "$MODEL_TARGET" 2>/dev/null)" ]; then
-        info "正在复制模型权重到项目目录..."
-        cp "$MODEL_SRC" "$MODEL_TARGET"
-        success "模型权重已放置到: others/Uni-Mol/unimol_docking_v2/"
-    else
-        success "模型权重已在正确位置"
-    fi
+    [ -f "$1" ] || { error "weight file not found: $1"; exit 1; }
+    mkdir -p "$(dirname "$UNIMOL_TARGET")"
+    cp "$1" "$UNIMOL_TARGET"
+    success "Uni-Mol weight placed"
+elif [ -f "$UNIMOL_TARGET" ]; then
+    success "Uni-Mol weight already present"
 else
-    if [ -f "$MODEL_TARGET" ]; then
-        success "模型权重已存在: others/Uni-Mol/unimol_docking_v2/unimol_docking_v2_240517.pt"
+    warn "Uni-Mol weight missing — docking disabled until you provide it:"
+    warn "  bash setup.sh /path/to/unimol_docking_v2_240517.pt"
+    warn "  download: https://github.com/deepmodeling/Uni-Mol/releases"
+fi
+
+# PocketFormer weights (Zenodo, ~396MB)
+if ls "$POCKET_EXAMPLES"/fold0_best_model.pt &>/dev/null; then
+    success "PocketFormer weights already present"
+else
+    info "Downloading PocketFormer weights from Zenodo (~396MB)..."
+    if curl -fSL "$ZENODO_WEIGHTS_URL" -o "$POCKET_EXAMPLES/best_models.tar.xz"; then
+        info "Extracting weights..."
+        ( cd "$POCKET_EXAMPLES" && tar xJf best_models.tar.xz && rm -f best_models.tar.xz )
+        success "PocketFormer weights ready"
     else
-        warn "未提供模型权重文件路径，分子对接功能将不可用"
-        warn "用法: bash setup.sh /path/to/unimol_docking_v2_240517.pt"
-        warn "下载地址: https://github.com/deepmodeling/Uni-Mol/releases"
+        warn "Weight download failed. Manually download best_models.tar.xz from"
+        warn "https://doi.org/10.5281/zenodo.13070037 and extract into $POCKET_EXAMPLES"
     fi
 fi
 
+# PLANET affinity model
+[ -f "$SCRIPT_DIR/others/PLANET/PLANET.param" ] && success "PLANET model present" \
+    || warn "PLANET.param missing — affinity prediction disabled (see https://github.com/ComputArtCMCG/PLANET)"
 echo ""
 
-# ============================================================
-# 3. 安装 Python 依赖
-# ============================================================
-info "正在安装 Python 依赖..."
-
-# 检查是否在虚拟环境中
-if [ -n "$VIRTUAL_ENV" ] || [ -n "$CONDA_DEFAULT_ENV" ]; then
-    success "检测到虚拟环境: ${VIRTUAL_ENV:-$CONDA_DEFAULT_ENV}"
-    PIP_EXTRA=""
-else
-    warn "未检测到虚拟环境，建议使用 conda 或 venv"
-    warn "例如: conda create -n flashdock python=3.9 && conda activate flashdock"
-    PIP_EXTRA="--break-system-packages"
-fi
-
-# 安装 PyTorch（如果未安装）
-python3 -c "import torch" 2>/dev/null
-if [ $? -ne 0 ]; then
-    info "正在安装 PyTorch..."
-    if [ "$HAS_CUDA" = true ]; then
-        pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118 $PIP_EXTRA 2>&1 | tail -3
-    else
-        pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu $PIP_EXTRA 2>&1 | tail -3
-    fi
-    success "PyTorch 安装完成"
-else
-    success "PyTorch 已安装"
-fi
-
-# 安装 Uni-Core（如果未安装）
-python3 -c "import unicore" 2>/dev/null
-if [ $? -ne 0 ]; then
-    info "正在安装 Uni-Core（可能需要几分钟）..."
-    pip3 install ninja $PIP_EXTRA 2>&1 | tail -1
-    cd "$SCRIPT_DIR/others/Uni-Core"
-    pip3 install . $PIP_EXTRA 2>&1 | tail -3
-    cd "$SCRIPT_DIR"
-    success "Uni-Core 安装完成"
-else
-    success "Uni-Core 已安装"
-fi
-
-# 安装其他依赖
-info "正在安装应用依赖..."
-pip3 install \
-    streamlit \
-    streamlit-molstar \
-    streamlit-ketcher \
-    py3Dmol \
-    stmol \
-    rdkit-pypi \
-    pandas \
-    numpy \
-    scipy \
-    scikit-learn \
-    matplotlib \
-    seaborn \
-    tqdm \
-    lmdb \
-    sh \
-    biopandas \
-    $PIP_EXTRA 2>&1 | tail -5
-
-success "所有 Python 依赖安装完成"
-echo ""
-
-# ============================================================
-# 4. 检查 P2Rank 权限
-# ============================================================
-PRANK="$SCRIPT_DIR/others/p2rank_2.5/prank"
-if [ -f "$PRANK" ]; then
-    chmod +x "$PRANK"
-    success "P2Rank 可执行权限已设置"
-else
-    warn "P2Rank 未找到，口袋预测功能将不可用"
-    warn "请下载: https://github.com/rdk/p2rank/releases/download/2.5/p2rank_2.5.tar.gz"
-fi
-
-# ============================================================
-# 5. 检查 PLANET 模型
-# ============================================================
-if [ -f "$SCRIPT_DIR/others/PLANET/PLANET.param" ]; then
-    success "PLANET 亲和力预测模型已就位"
-else
-    warn "PLANET 模型参数缺失，亲和力预测功能将不可用"
-    warn "请从 https://github.com/ComputArtCMCG/PLANET 获取 PLANET.param"
-fi
-
-echo ""
-
-# ============================================================
-# 6. 创建必要目录
-# ============================================================
+# ------------------------------------------------------------
+# 5. work dirs
+# ------------------------------------------------------------
 mkdir -p jobs Result/Binding_Affinity Result/Docking_Result Result/Predict_Pocket Result/Prepare_Ligand
-success "工作目录已创建"
+success "Work directories ready"
 
-# ============================================================
-# 7. 最终检查
-# ============================================================
+# ------------------------------------------------------------
+# 6. summary
+# ------------------------------------------------------------
 echo ""
 echo "========================================"
-echo "  📋 安装状态总结"
+echo "  📋 install summary"
 echo "========================================"
+check() { [ "$2" = "true" ] && echo -e "  ${GREEN}✅${NC} $1" || echo -e "  ${RED}❌${NC} $1"; }
 
-check_item() {
-    if [ "$2" = "true" ]; then
-        echo -e "  ${GREEN}✅${NC} $1"
-    else
-        echo -e "  ${RED}❌${NC} $1"
-    fi
-}
-
-# Python 依赖
-PY_OK=$(python3 -c "import streamlit, rdkit, torch, pandas; print('true')" 2>/dev/null || echo "false")
-check_item "Python 核心依赖 (streamlit, rdkit, torch, pandas)" "$PY_OK"
-
-# Uni-Core
-UC_OK=$(python3 -c "import unicore; print('true')" 2>/dev/null || echo "false")
-check_item "Uni-Core 框架" "$UC_OK"
-
-# 模型权重
-[ -f "$MODEL_TARGET" ] && MW_OK="true" || MW_OK="false"
-check_item "Uni-Mol 对接模型权重 (465MB)" "$MW_OK"
-
-# P2Rank
-[ -x "$PRANK" ] && PR_OK="true" || PR_OK="false"
-check_item "P2Rank 口袋预测工具" "$PR_OK"
-
-# PLANET
-[ -f "$SCRIPT_DIR/others/PLANET/PLANET.param" ] && PL_OK="true" || PL_OK="false"
-check_item "PLANET 亲和力预测模型" "$PL_OK"
-
-# Java
-command -v java &>/dev/null && JV_OK="true" || JV_OK="false"
-check_item "Java 运行环境 (口袋预测需要)" "$JV_OK"
-
+PY_OK=$(python3 -c "import streamlit, rdkit, torch, pandas" 2>/dev/null && echo true || echo false)
+check "App core deps (streamlit, rdkit, torch, pandas)" "$PY_OK"
+check "Uni-Core" "$(python3 -c 'import unicore' 2>/dev/null && echo true || echo false)"
+check "Uni-Mol docking weight" "$([ -f "$UNIMOL_TARGET" ] && echo true || echo false)"
+check "PocketFormer env ($POCKET_ENV)" "$($SOLVER env list | grep -q "$POCKET_ENV" && echo true || echo false)"
+check "PocketFormer weights" "$(ls "$POCKET_EXAMPLES"/fold0_best_model.pt &>/dev/null && echo true || echo false)"
+check "PLANET affinity model" "$([ -f "$SCRIPT_DIR/others/PLANET/PLANET.param" ] && echo true || echo false)"
 echo "========================================"
 echo ""
 
-# ============================================================
-# 8. 启动应用
-# ============================================================
+# ------------------------------------------------------------
+# 7. launch
+# ------------------------------------------------------------
 if [ "$PY_OK" = "true" ]; then
-    info "正在启动 FLASH_DOCK..."
+    info "Launching FLASH_DOCK → http://localhost:8501  (Ctrl+C to stop)"
     echo ""
-    echo "  🌐 应用地址: http://localhost:8501"
-    echo "  📌 按 Ctrl+C 停止服务"
-    echo ""
-    streamlit run "$SCRIPT_DIR/FlashDock_0315.py"
+    streamlit run "$SCRIPT_DIR/app.py"
 else
-    error "核心依赖缺失，无法启动。请检查上方错误信息。"
+    error "Core dependencies missing — not launching. See errors above."
     exit 1
 fi
